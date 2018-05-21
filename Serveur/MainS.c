@@ -1,5 +1,3 @@
-#include <pthread.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -12,52 +10,68 @@
 #include <string.h>    //strlen
 #include <arpa/inet.h> //inet_addr
  
-
 #include <fcntl.h>
+#include <pthread.h>
 
 
+#include "StoC.h"
+#include "ServerListS.h"
+
+
+
+
+
+char* myPID = "127.0.0.1";
  
-//the thread function
+///the thread function for Clients
 void *connection_handler(void *);
- 
+
+///the thread function for other Servers
+void *servers_handler(void *);
+
+
+
+
+
 int main(int argc , char *argv[])
 {
+	init_persistant();
+	init_list();
+	
     int socket_desc , client_sock , c , *new_sock;
     struct sockaddr_in server , client;
      
-    //Create socket
+    ///Create socket
     socket_desc = socket(AF_INET , SOCK_STREAM , 0);
-    if (socket_desc == -1)
-    {
+    if (socket_desc == -1){
         printf("Could not create socket");
     }
     puts("Socket created");
      
-    //Prepare the sockaddr_in structure
+     
+    ///Prepare the sockaddr_in structure
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons( 8888 );
+    server.sin_port = htons( PORT_SERVICE );
      
-    //Bind
-    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0)
-    {
+     
+    ///Bind
+    if( bind(socket_desc,(struct sockaddr *)&server , sizeof(server)) < 0){
         //print the error message
         perror("bind failed. Error");
         return 1;
     }
     puts("bind done");
      
-    //Listen
+     
+    ///Listen
     listen(socket_desc , 3);
      
-    //Accept and incoming connection
+     
+    ///Accept and incoming connection
     puts("Waiting for incoming connections...");
     c = sizeof(struct sockaddr_in);
-     
-     
-    //Accept and incoming connection
-    puts("Waiting for incoming connections...");
-    c = sizeof(struct sockaddr_in);
+
     while( (client_sock = accept(socket_desc, (struct sockaddr *)&client, (socklen_t*)&c)) )
     {
         puts("Connection accepted");
@@ -72,8 +86,8 @@ int main(int argc , char *argv[])
             return 1;
         }
          
-        //Now join the thread , so that we dont terminate before the thread
-        //pthread_join( sniffer_thread , NULL);
+        ///Now join the thread , so that we dont terminate before the thread
+        pthread_join( sniffer_thread , NULL);
         puts("Handler assigned");
     }
      
@@ -85,43 +99,139 @@ int main(int argc , char *argv[])
      
     return 0;
 }
- 
-/*
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/**
  * This will handle connection for each client
- * */
+ **/
 void *connection_handler(void *socket_desc)
 {
-    //Get the socket descriptor
+    ///Get the socket descriptor
     int sock = *(int*)socket_desc;
     int read_size;
-    char *message , client_message[2000];
+    char *message , client_message[4096];
+
      
-    //Send some messages to the client
-    message = "Greetings! I am your connection handler\n";
-    write(sock , message , strlen(message));
-     
-    message = "Now type something and i shall repeat what you type \n";
-    write(sock , message , strlen(message));
-     
-    //Receive a message from client
-    while( (read_size = recv(sock , client_message , 2000 , 0)) > 0 )
-    {
-        //Send the message back to client
-        write(sock , client_message , strlen(client_message));
+    ///Receive a message from client
+    while( (read_size = recv(sock , client_message , 4096 , 0)) > 0 ){
+		strtok(client_message, " ");
+		
+		
+/** Format de messages recus : create <nom> <val>
+ * 	Format de messages envoyes : create <nom> OK <details> 
+ * 						ou	   : create <nom> KO <details> 
+ **/		
+        if(strcmp(client_message, "creer")==0){
+			char* nom = strtok(NULL, " ");
+			char *val = strtok(NULL, " ");
+			char* res = p_create(nom, val, sock);
+			write(sock, res, strlen(res));
+			continue;
+		}
+		
+/** 1) Récupération de valeur  : (p_access_read)
+ *  Format de messages envoyes : access_read <nom>
+ * 	Format de messages recus   : access_read <nom> OK <val> 
+ * 						ou	   : access_read <nom> KO <details>
+ *  2) Fin Lecture :
+ *  Format de messages envoyes : release_read <nom>
+ * 	Format de messages recus   : release_read <nom> OK <details> 
+ * 						ou	   : release_read <nom> KO <details>
+ **/
+        else if(strcmp(client_message, "access_read")==0){
+			char* nom = strtok(NULL, " ");
+			char* res = p_access_read(nom, sock);
+			write(sock, res, strlen(res));
+			continue;
+		}       
+		    
+        else if(strcmp(client_message, "release_read")==0){
+			char* nom = strtok(NULL, " ");
+			char* res = p_release_read(nom, sock);
+			write(sock, res, strlen(res));
+			continue;
+		}
+		
+/** 1) Récupération de valeur :
+ * Format de messages envoyes : access_readwrite <nom>	
+ * Format de messages recus : access_readwrite <nom> OK <val> 
+ * 						ou	 : access_readwrite <nom> KO <details> 
+ * 2) Renvoie de modification :
+ * 	Format de messages envoyes : release_readwrite <nom> <val>
+ * 	Format de messages recus : release_readwrite <nom> OK <details> 
+ * 						ou	 : release_readwrite <nom> KO <details>  
+ **/      
+        else if(strcmp(client_message, "access_readwrite")==0){
+			char* nom = strtok(NULL, " ");
+			char* res = p_access_readwrite(nom, sock);
+			write(sock, res, strlen(res));
+			continue;
+		}       
+		    
+        else if(strcmp(client_message, "release_readwrite")==0){
+			char* nom = strtok(NULL, " ");
+			char *val = strtok(NULL, " ");
+			char* res = p_release_readwrite(nom, sock, val);
+			write(sock, res, strlen(res));
+			continue;
+		}       
+
+
+		else{
+			char *res = "Error : request not known";
+			write(sock, res, strlen(res));
+			continue;
+		}       
     }
      
-    if(read_size == 0)
-    {
+    if(read_size == 0){
         puts("Client disconnected");
+        // libérer ces ressources
         fflush(stdout);
     }
-    else if(read_size == -1)
-    {
+    else if(read_size == -1){
         perror("recv failed");
     }
          
-    //Free the socket pointer
+    ///Free the socket pointer
     free(socket_desc);
      
     return 0;
+}
+
+
+void *servers_handler(void *qqch){
+	return NULL;
 }
