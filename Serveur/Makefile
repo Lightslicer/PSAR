@@ -1,20 +1,25 @@
 .PHONY: all clean
 
-CC: gcc
-CFLAGS: -W -Wall -g
+
+all: MainS
 
 
-all: Serveur #MainC MainS
 
 
-%.o: %.c Serveur.h
-	$(CC) -c $< $(CFLAGS)
-	
-%: %.o
-	$(CC) -o $@ $^ $(CFLAGS)
+
+Serveur.o: Serveur.c Serveur.h ServerListS.h
+	 gcc -c Serveur.c -Wall -lm
+
+
+MainS.o: MainS.c Serveur.o
+	gcc -c MainS.c
+
+
+MainS: MainS.o
+	gcc -o MainS MainS.o Serveur.o
+
 
 
 
 clean:
-	rm -f *.o Serveur *.gch #MainC MainS
-
+	rm -rf *.o StoC MainS *.gch
