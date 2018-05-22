@@ -15,11 +15,6 @@
 
 
 
-
-
-
-
-
 /** Format de messages envoyes : create <nom> <val>
  * 	Format de messages recus : create <nom> OK <details> 
  * 						ou	 : create <nom> KO <details> 
